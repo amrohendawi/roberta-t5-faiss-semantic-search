@@ -2,14 +2,13 @@
 
 This is a semantic search implementation combining Roberta + T5 + FAISS
 
-```flow
-st=>start: dataset
-op=>operation: T5 query generation
-op2=>operation: fine-tuning ROBERTA model
-op3=>operation: FAISS search
-op4=>operation: FAISS (indexing + clustering + search)
-end=>end: output
-st->op->op2->op3->op4->end
+
+```mermaid
+  graph TD;
+      dataset-->T5_query_generation;
+      T5_query_generation-->fine-tuning_ROBERTA_model;
+      fine-tuning_ROBERTA_model-->FAISS_search;
+      FAISS_search-->FAISS_(indexing + clustering + search);
 ```
 
 
