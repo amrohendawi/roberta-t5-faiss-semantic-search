@@ -12,6 +12,9 @@ This is a semantic search implementation combining Roberta + T5 + FAISS
 ```
 
 
+## Demo
+![demo](screenshots/demo.gif)
+
 ### Running the app locally
 
 First, clone the git repo, then create a virtual environment for installing dependencies.
