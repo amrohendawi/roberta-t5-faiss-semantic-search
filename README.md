@@ -42,11 +42,18 @@ python app.py
 ### Working on the implementation
 
 Before you push to heroku make sure to update the dependencies in the requirements.txt file in case of new additions.
+
 Heroku will automatically deploy the latest version of the app after every commit to the master branch.
 
 ```bash
 pip freeze > requirements.txt
 ```
+
+### Training a model
+
+To train and test a new model on your own dataset please refer to the jupyter notebook provided in the repository [here](semantic-search-with-roberta-de-faiss.ipynb).
+
+Make sure to check out app.py for a working example on calling SemanticSearch and using it.
 
 ## Built With
 

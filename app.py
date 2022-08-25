@@ -2,7 +2,7 @@ import pandas as pd
 from dash import Dash, html, Input, Output, State, callback, dcc
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from model_backend import SemanticSearch
+from SemanticSearch import SemanticSearch
 
 app = Dash(
     __name__, meta_tags=[
