@@ -33,6 +33,9 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Download a ready model from this [link](https://drive.google.com/file/d/1x2IVoogLX-WQq3Eu9BrR8wN2haXmPPGL/view?usp=sharing)
+
+
 Run the app
 
 ```
