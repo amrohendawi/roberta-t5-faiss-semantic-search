@@ -41,12 +41,14 @@ def query_test(query, model):
 
 
 class SemanticSearch:
-    def __init__(self, model_name, local_model=False):
+    def __init__(self, model_name, local_model=False, device='cpu'):
         print("Torch CUDA available: {}".format(torch.cuda.is_available()))
         self.data = pd.DataFrame()
         self.paragraphs = []
         self.model = None
         self.index = None
+        self.device = device
+
         self.read_data()
 
         if local_model:
@@ -84,23 +86,23 @@ class SemanticSearch:
                 zip_file.extractall()
             print(f'{model_name}.zip found and unzipped')
         self.model = SentenceTransformer(f'models/{model_name}')
-        self.model.to('cuda')
+        self.model.to(self.device)
 
     def fine_tune(self, model_name, batch_size=2, num_queries=3, max_length_paragraph=512, max_length_query=48):
         print("Fine tuning a new model")
         from transformers import T5Tokenizer, T5ForConditionalGeneration
         from sentence_transformers import InputExample, losses, models, datasets
 
-        def generate_synthetic_queries(paragraphs, tsv, device='cuda'):
+        def generate_synthetic_queries(self, paragraphs, tsv):
             tokenizer = T5Tokenizer.from_pretrained('BeIR/query-gen-msmarco-t5-large-v1')
             generating_model = T5ForConditionalGeneration.from_pretrained('BeIR/query-gen-msmarco-t5-large-v1')
             generating_model.eval()
-            generating_model.to(device)
+            generating_model.to(self.device)
             with open(tsv, 'w', encoding='utf-8') as fOut:
                 for start_idx in tqdm(range(0, len(paragraphs), batch_size)):
                     sub_paragraphs = paragraphs[start_idx:start_idx + batch_size]
                     inputs = tokenizer.prepare_seq2seq_batch(sub_paragraphs, max_length=max_length_paragraph,
-                                                             truncation=True, return_tensors='pt').to(device)
+                                                             truncation=True, return_tensors='pt').to(self.device)
                     outputs = generating_model.generate(
                         **inputs,
                         max_length=max_length_query,
