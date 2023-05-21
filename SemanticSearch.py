@@ -16,7 +16,7 @@ from utils import *
 
 
 class SemanticSearch:
-    def __init__(self, model_name, local_model=False, device='cpu', data_file=None, plot_distribution=False):
+    def __init__(self, model_name, local_model=False, device='cpu', data_file=None, columns=None, duplicate_filtering_columns=None, plot_distribution=False):
         print("Torch CUDA available: {}".format(torch.cuda.is_available()))
         self.data = pd.DataFrame()
         self.paragraphs = []
@@ -24,7 +24,7 @@ class SemanticSearch:
         self.index = None
         self.device = device
 
-        self.read_data(plot_distribution=plot_distribution, data_file=data_file)
+        self.read_data(plot_distribution=plot_distribution, data_file=data_file, columns=columns, duplicate_filtering_columns=duplicate_filtering_columns)
 
         if local_model:
             self.load_local_model(model_name)
@@ -41,15 +41,15 @@ class SemanticSearch:
         results = [fetch_course_info(idx, self.data) for idx in top_k_ids]
         return results
 
-    def read_data(self, plot_distribution=False, data_file=None):
+    def read_data(self, plot_distribution=False, data_file=None, columns=None, duplicate_filtering_columns=None):
         data = pd.read_json(data_file, encoding='utf-8')
         data.info()
-        self.data = data[['CS_NAME', 'CS_DESC_LONG']]
+        self.data = data[columns]
         del data
         gc.collect()
 
         self.data.dropna(inplace=True)
-        self.data.drop_duplicates(subset=['CS_DESC_LONG'], inplace=True)
+        self.data.drop_duplicates(subset=duplicate_filtering_columns, inplace=True)
         self.paragraphs = self.data.CS_DESC_LONG.tolist()
 
         if plot_distribution:
@@ -145,9 +145,9 @@ class SemanticSearch:
         with ZipFile(f'models/{model_name}.zip', 'w') as zipObj:
             zipObj.write(f'models/{model_name}')
 
-    def create_index(self, index_file=None):
+    def create_index(self, index_file=None, data_column=None):
         print("Creating index")
-        encoded_data = self.model.encode(self.data.CS_NAME.tolist(), show_progress_bar=True)
+        encoded_data = self.model.encode(self.data[data_column].tolist(), show_progress_bar=True)
         encoded_data = np.asarray(encoded_data.astype('float32'))
         self.index = faiss.IndexIDMap(faiss.IndexFlatIP(768))
         self.index.add_with_ids(encoded_data, np.array(range(0, len(self.data))).astype(np.int64))
@@ -160,6 +160,8 @@ if __name__ == '__main__':
     parser.add_argument('--local_model', action='store_true', help='Use a local pre-trained model')
     parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on: cpu or cuda')
     parser.add_argument('--dataset', type=str, default='weiterbildung', help='Path to the dataset folder where dataset.json is stored')
+    parser.add_argument('--columns', nargs='+', default=['CS_NAME', 'CS_DESC_LONG'], help='Columns of the dataset to be used for the training')
+    parser.add_argument('--dupl_filter_cols', nargs='+', default=['CS_DESC_LONG'], help='Columns of the dataset to be used for the duplicates filtering')
     parser.add_argument('--plot_distribution', action='store_true', help='Plot the distribution of the data')
     args = parser.parse_args()
 
@@ -168,7 +170,9 @@ if __name__ == '__main__':
         local_model=args.local_model,
         device=args.device,
         data_file=f"datasets/{args.dataset}/dataset.json",
+        columns=args.columns,
+        duplicate_filtering_columns=args.dupl_filter_cols,
         plot_distribution=args.plot_distribution
     )
-    model.create_index(index_file=f"datasets/{args.dataset}/index.faiss")
+    model.create_index(index_file=f"datasets/{args.dataset}/index.faiss", data_column=args.columns[0])
     run_query_tests(model)
