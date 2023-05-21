@@ -56,6 +56,12 @@ pip freeze > requirements.txt
 
 To train and test a new model on your own dataset please refer to the jupyter notebook provided in the repository [here](semantic-search-with-roberta-de-faiss.ipynb).
 
+You can also train directly by running the SemanticSearch script with the following example arguments:
+
+```shell
+python SemanticSearch.py --model_name "my_model" --local_model --device cuda --data_file "my_dataset.json"
+```
+
 Make sure to check out app.py for a working example on calling SemanticSearch and using it.
 
 ## Built With

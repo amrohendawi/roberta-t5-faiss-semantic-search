@@ -15,16 +15,15 @@ app.config.suppress_callback_exceptions = True
 
 server = app.server
 
-data = pd.read_json('courses_dataset.json', encoding='utf-8')
+data = pd.read_json('datasets/weiterbildung/dataset.json', encoding='utf-8')
 data = data[['CS_NAME', 'CS_DESC_LONG']]
 data.dropna(inplace=True)
 data.drop_duplicates(subset=['CS_NAME'], inplace=True)
 data.info()
 
-model = None
-if not model:
-    model = SemanticSearch(model_name='rtx_3070', local_model=True)
-    model.create_index()
+model = SemanticSearch(model_name='weiterbildung', local_model=True,
+                       data_file='datasets/weiterbildung/dataset.json')
+model.create_index(index_file="course_description.index")
 
 app.layout = dmc.Center(
     dmc.Group(

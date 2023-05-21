@@ -1,10 +1,10 @@
+import argparse
 from zipfile import ZipFile
 from tqdm import tqdm
 import time
 import os
 import random
 import gc
-import numpy as np
 import pandas as pd
 
 from sentence_transformers import SentenceTransformer
@@ -12,36 +12,11 @@ from sentence_transformers import SentenceTransformer
 import faiss
 import torch
 
-
-def plot_data_distribution(df):
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-
-    df['doc_len'] = df['CS_NAME'].apply(lambda words: len(words.split()))
-    max_seq_len = np.round(df['doc_len'].mean() + df['doc_len'].std()).astype(int)
-    sns.distplot(df['doc_len'], hist=True, kde=True, color='b', label='doc len')
-    plt.axvline(x=max_seq_len, color='k', linestyle='--', label='max len')
-    plt.title('plot length')
-    plt.legend()
-    plt.show()
-
-
-def fetch_course_info(dataframe_idx, df):
-    info = df.iloc[dataframe_idx]
-    meta_dict = {'CS_NAME': info['CS_NAME'], 'CS_DESC_LONG': info['CS_DESC_LONG']}
-    return meta_dict
-
-
-def query_test(query, model):
-    results = model.search(query, top_k=5)
-
-    print("\n")
-    for result in results:
-        print('\t', result)
+from utils import *
 
 
 class SemanticSearch:
-    def __init__(self, model_name, local_model=False, device='cpu'):
+    def __init__(self, model_name, local_model=False, device='cpu', data_file=None, plot_distribution=False):
         print("Torch CUDA available: {}".format(torch.cuda.is_available()))
         self.data = pd.DataFrame()
         self.paragraphs = []
@@ -49,12 +24,12 @@ class SemanticSearch:
         self.index = None
         self.device = device
 
-        self.read_data()
+        self.read_data(plot_distribution=plot_distribution, data_file=data_file)
 
         if local_model:
             self.load_local_model(model_name)
         else:
-            self.fine_tune(model_name)
+            self.fine_tune(model_name, generated_queries_file=f'models/generated_queries_{model_name}.tsv')
 
     def search(self, query, top_k):
         t = time.time()
@@ -66,8 +41,8 @@ class SemanticSearch:
         results = [fetch_course_info(idx, self.data) for idx in top_k_ids]
         return results
 
-    def read_data(self, plot_distribution=False):
-        data = pd.read_json('courses_dataset.json', encoding='utf-8')
+    def read_data(self, plot_distribution=False, data_file=None):
+        data = pd.read_json(data_file, encoding='utf-8')
         data.info()
         self.data = data[['CS_NAME', 'CS_DESC_LONG']]
         del data
@@ -80,26 +55,38 @@ class SemanticSearch:
         if plot_distribution:
             plot_data_distribution(self.data)
 
-    def load_local_model(self, model_name):
-        if not os.path.exists(f'models/{model_name}') and os.path.exists(f'{model_name}.zip'):
-            with ZipFile(f'{model_name}.zip', 'r') as zip_file:
+    def load_local_model(self, model_folder):
+        if not os.path.exists(f"models/{model_folder}") and os.path.exists(f'models/{model_folder}.zip'):
+            with ZipFile(f'models/{model_folder}.zip', 'r') as zip_file:
                 zip_file.extractall()
-            print(f'{model_name}.zip found and unzipped')
-        self.model = SentenceTransformer(f'models/{model_name}')
+            print(f'models/{model_folder}.zip found and unzipped')
+        self.model = SentenceTransformer(f"models/{model_folder}")
         self.model.to(self.device)
 
-    def fine_tune(self, model_name, batch_size=2, num_queries=3, max_length_paragraph=512, max_length_query=48):
+    def fine_tune(self, model_name, batch_size=10, num_queries=3, max_length_paragraph=512, max_length_query=48,
+                  generated_queries_file=None):
         print("Fine tuning a new model")
         from transformers import T5Tokenizer, T5ForConditionalGeneration
         from sentence_transformers import InputExample, losses, models, datasets
 
-        def generate_synthetic_queries(self, paragraphs, tsv):
-            tokenizer = T5Tokenizer.from_pretrained('BeIR/query-gen-msmarco-t5-large-v1')
-            generating_model = T5ForConditionalGeneration.from_pretrained('BeIR/query-gen-msmarco-t5-large-v1')
+        def generate_synthetic_queries(paragraphs, tsv):
+            print("Generating synthetic queries")
+            query_generator_model = "BeIR/query-gen-msmarco-t5-large-v1"
+            stored_model = "models/query_generator_model"
+            if not os.path.exists(stored_model):
+                os.makedirs(stored_model)
+                tokenizer = T5Tokenizer.from_pretrained(query_generator_model)
+                generating_model = T5ForConditionalGeneration.from_pretrained(query_generator_model)
+                generating_model.save_pretrained(stored_model)
+                tokenizer.save_pretrained(stored_model)
+            else:
+                tokenizer = T5Tokenizer.from_pretrained(stored_model)
+                generating_model = T5ForConditionalGeneration.from_pretrained(stored_model)
+
             generating_model.eval()
             generating_model.to(self.device)
             with open(tsv, 'w', encoding='utf-8') as fOut:
-                for start_idx in tqdm(range(0, len(paragraphs), batch_size)):
+                for start_idx in tqdm(range(0, len(paragraphs), batch_size), desc="Generate queries", leave=False):
                     sub_paragraphs = paragraphs[start_idx:start_idx + batch_size]
                     inputs = tokenizer.prepare_seq2seq_batch(sub_paragraphs, max_length=max_length_paragraph,
                                                              truncation=True, return_tensors='pt').to(self.device)
@@ -148,30 +135,40 @@ class SemanticSearch:
             os.makedirs(f'models/{model_name}', exist_ok=True)
             self.model.save(f'models/{model_name}')
 
-        if not os.path.exists(f'generated_queries_{model_name}.tsv'):
-            generate_synthetic_queries(self.paragraphs, tsv=f'generated_queries_{model_name}.tsv')
+        if not os.path.exists(generated_queries_file):
+            generate_synthetic_queries(paragraphs=self.paragraphs, tsv=generated_queries_file)
 
         if not os.path.exists(f'models/{model_name}') or not os.listdir(f'models/{model_name}'):
-            run_fine_tune(tsv=f'generated_queries_{model_name}.tsv')
+            run_fine_tune(tsv=f'models/generated_queries_{model_name}.tsv')
 
         # zip the new model in search folder
-        with ZipFile(f'{model_name}.zip', 'w') as zipObj:
+        with ZipFile(f'models/{model_name}.zip', 'w') as zipObj:
             zipObj.write(f'models/{model_name}')
 
-    def create_index(self):
+    def create_index(self, index_file=None):
         print("Creating index")
         encoded_data = self.model.encode(self.data.CS_NAME.tolist(), show_progress_bar=True)
         encoded_data = np.asarray(encoded_data.astype('float32'))
         self.index = faiss.IndexIDMap(faiss.IndexFlatIP(768))
         self.index.add_with_ids(encoded_data, np.array(range(0, len(self.data))).astype(np.int64))
-        faiss.write_index(self.index, 'course_description.index')
+        faiss.write_index(self.index, index_file)
 
-    def run_query_tests(self):
-        print("Running query tests")
-        query_test('Python Entwicklung', self.model)
-        query_test('DevOps Azure CI/CD', self.model)
 
 if __name__ == '__main__':
-    model = SemanticSearch(model_name='rtx_3070', local_model=True)
-    model.create_index()
-    model.run_query_tests()
+    parser = argparse.ArgumentParser(description='Semantic Search')
+    parser.add_argument('--model_name', type=str, default='rtx_3070', help='Name of the model')
+    parser.add_argument('--local_model', action='store_true', help='Use a local pre-trained model')
+    parser.add_argument('--device', type=str, default='cpu', help='Device to run the model on: cpu or cuda')
+    parser.add_argument('--dataset', type=str, default='weiterbildung', help='Path to the dataset folder where dataset.json is stored')
+    parser.add_argument('--plot_distribution', action='store_true', help='Plot the distribution of the data')
+    args = parser.parse_args()
+
+    model = SemanticSearch(
+        model_name=args.model_name,
+        local_model=args.local_model,
+        device=args.device,
+        data_file=f"datasets/{args.dataset}/dataset.json",
+        plot_distribution=args.plot_distribution
+    )
+    model.create_index(index_file=f"datasets/{args.dataset}/index.faiss")
+    run_query_tests(model)
