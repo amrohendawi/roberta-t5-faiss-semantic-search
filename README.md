@@ -54,11 +54,10 @@ pip freeze > requirements.txt
 
 ### Training a model
 
-To train and test a new model on your own dataset please refer to the jupyter notebook provided in the repository [here](semantic-search-with-roberta-de-faiss.ipynb).
+To train and test a new model on your own dataset:
 
-You can also train directly by running the SemanticSearch script with the following example arguments:
 ```shell
-python SemanticSearch.py --model_name weiterbildung --local_model --device cuda --dataset weiterbildung
+python train.py --model_name weiterbildung --local_model --device cuda --dataset weiterbildung --title_col CS_NAME --desc_col CS_DESC_LONG
 ```
 
 Make sure to put the dataset in `datasets/<dataset name>/dataset.json`.
